@@ -10,6 +10,7 @@ KERNEL_REPO=git://git.kernel.org/pub/scm/linux/kernel/git/stable/linux-stable.gi
 KERNEL_VERSION=v5.1.10
 BUSYBOX_VERSION=1_33_1
 FINDER_APP_DIR=$(realpath $(dirname $0))
+PATCH_DIR=$(pwd)
 ARCH=arm64
 CROSS_COMPILE=aarch64-none-linux-gnu-
 
@@ -35,6 +36,14 @@ if [ ! -e ${OUTDIR}/linux-stable/arch/${ARCH}/boot/Image ]; then
     git checkout ${KERNEL_VERSION}
 
     # TODO: Add your kernel build steps here
+    # Steps fo fix yyloc error during  kernel build
+    cp "$PATCH_DIR"/dtc-multiple-definition.patch .
+    if git apply --check dtc-multiple-definition.patch; then
+        git apply dtc-multiple-definition.patch
+    else
+        echo "Patch already applied"
+    fi
+
     make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- mrproper
     make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- defconfig
     make ARCH=arm64 CROSS_COMPILE=aarch64-none-linux-gnu- config

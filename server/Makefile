@@ -3,11 +3,11 @@
 CFLAGS += -g -Wall -Werror
 #CROSS_COMPILE ?= aarch64-none-linux-gnu-
 
-CC=$(CROSS_COMPILE)gcc
+#CC=$(CROSS_COMPILE)gcc
 
-all: default
+all: aesdsocket
 
-default: aesdsocket.c 
+aesdsocket: aesdsocket.c 
 	#$(CC) -o aesdsocket aesdsocket.c 
 	$(CC) $(CFLAGS) $(INCLUDES) $(OBJS) $(LDFLAGS) aesdsocket.c -o aesdsocket
 

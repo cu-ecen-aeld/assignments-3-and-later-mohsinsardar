@@ -43,7 +43,6 @@ int main(int argc, char *argv[])
 {
 	int  sockfd, new_fd, status, yes=1, readlen = 0;;
 	struct addrinfo hints, *res , *p;
-	socklen_t addrlen;
 	struct sigaction sa;
 	FILE *fp;
 	char sendbuf[BUFFER_SIZE + 1];
@@ -59,8 +58,8 @@ int main(int argc, char *argv[])
 	hints.ai_flags = AI_PASSIVE;
 	hints.ai_socktype = SOCK_STREAM;
 	hints.ai_family = AF_INET;
-
-	if(status = getaddrinfo(NULL,SERVERPORT,&hints,&res) != 0)
+	status = getaddrinfo(NULL,SERVERPORT,&hints,&res);
+	if(status != 0)
 	{
 		//fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
 		syslog(LOG_ERR,"Getaddrinfo Error: (%s) ", gai_strerror(status));
@@ -169,7 +168,7 @@ int main(int argc, char *argv[])
 		//printf("Server: Accepted connection from %s\n", s);
 		syslog (LOG_INFO, "Server: Accepted connection from %s\n", s);
 
-		long total_bytes = 0, total_bytes_offset = 0;
+		long total_bytes = 0;
 		char *recv_data = malloc (BUFFER_SIZE);
 
 		while(1)
@@ -236,7 +235,7 @@ int main(int argc, char *argv[])
 
 				//printf("Read: recv_data:%x, total_data:%x, total_bytes_recv:%x \n",recv_data, total_data,total_bytes_recv);
 				fseek(fp, 0, SEEK_SET);
-				while (readlen = fread(sendbuf, sizeof(char), total_bytes_recv, fp ))
+				while ( (readlen = fread(sendbuf, sizeof(char), total_bytes_recv, fp )) )
 				{
 					printf("Readlen:%d\n",readlen);
 					if(readlen == -1 )
@@ -262,7 +261,6 @@ int main(int argc, char *argv[])
 				free(recv_data);
 				recv_data = malloc (BUFFER_SIZE);
 				total_bytes = BUFFER_SIZE;
-				total_bytes_offset = 0;
 				total_data = 0;
 				break;
 			}

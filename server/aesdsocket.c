@@ -267,7 +267,7 @@ int main(int argc, char *argv[])
 			
 		}
 		free(recv_data);
-		//close(new_fd);
+		close(new_fd);
 	}
 
 	shutdown(sockfd, SHUT_RD);

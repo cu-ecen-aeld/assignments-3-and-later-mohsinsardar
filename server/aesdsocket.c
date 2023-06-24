@@ -16,7 +16,7 @@
 
 #define SERVERPORT "9000"
 #define BACKLOG 10
-#define BUFFER_SIZE (1024)
+#define BUFFER_SIZE (1000)
 
 bool caught_sigint = false;
 bool caught_sigterm = false;

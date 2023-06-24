@@ -184,7 +184,6 @@ int main(int argc, char *argv[])
 				exit(-1);
 			}
 			int recv_count = recv(new_fd, recv_data+total_bytes, BUFFER_SIZE,0);
-			//int recv_count = recv(sockfd, recv_data+total_bytes, BUFFER_SIZE,0);
 			if(recv_count < 1)
 			{
 				free(recv_data);
@@ -196,7 +195,7 @@ int main(int argc, char *argv[])
 				closelog();
 				exit(-1);
 			}
-			//total_bytes_offset = total_bytes;
+			printf("Recv:%d\n",recv_count);
 			total_bytes +=recv_count;
 			
 			recv_data = (char*)realloc(recv_data, total_bytes+BUFFER_SIZE);
@@ -235,7 +234,7 @@ int main(int argc, char *argv[])
 
 				//printf("Read: recv_data:%x, total_data:%x, total_bytes_recv:%x \n",recv_data, total_data,total_bytes_recv);
 				fseek(fp, 0, SEEK_SET);
-				while ( (readlen = fread(sendbuf, sizeof(char), total_bytes_recv, fp )) )
+				while ( (readlen = fread(sendbuf, sizeof(char), BUFFER_SIZE, fp )) )
 				{
 					printf("Readlen:%d\n",readlen);
 					if(readlen == -1 )

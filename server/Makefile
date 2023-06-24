@@ -1,6 +1,6 @@
 .PHONY: all default clean valgrind
 
-CFLAGS += -g -Wall -Werror
+CFLAGS += -g -Wall -Werror -D_FORTIFY_SOURCE=1 -fstack-protector
 #CROSS_COMPILE ?= aarch64-none-linux-gnu-
 
 #CC=$(CROSS_COMPILE)gcc

@@ -20,9 +20,8 @@
 #define BACKLOG 50
 #define BUFFER_SIZE (1000)
 
-bool caught_sigint = false;
-bool caught_sigterm = false;
-bool time_thread = false;
+volatile bool caught_sigint = false;
+volatile bool caught_sigterm = false;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 char s[BACKLOG][INET6_ADDRSTRLEN];
 const char *temp_file = "/var/tmp/aesdsocketdata";
@@ -54,11 +53,13 @@ void *socketThread(void *arg)
 	int  readlen = 0;
 
 	long total_bytes = 0;
+	//char *recv_data;
 	char *recv_data = malloc (BUFFER_SIZE);
 	openlog("slog", LOG_PID|LOG_CONS, LOG_USER);
 
 	while(1)
 	{
+		//recv_data = malloc (BUFFER_SIZE);
 		if(caught_sigint || caught_sigterm)
 		{
 			//Close Sockets, Logging and Exit 
@@ -161,6 +162,7 @@ void *socketThread(void *arg)
 			free(recv_data);
 			recv_data = malloc (BUFFER_SIZE);
 			total_bytes = BUFFER_SIZE;
+			//total_bytes = 0;
 			total_data = 0;
 			break;
 		}
@@ -173,69 +175,6 @@ void *socketThread(void *arg)
 	pthread_exit(NULL);
 }
 
-#if 0
-void *time_write_thread(void *arg)
-{
-	int tcount = 0;
-	char timestr[100];
-	time_t ti,reftime=0;
-	struct tm *tmp;
-	FILE *fp;
-	openlog("slog", LOG_PID|LOG_CONS, LOG_USER);
-
-	while(1)
-	{
-		if(caught_sigint || caught_sigterm)
-		{
-			//Close Sockets, Logging and Exit 
-			syslog(LOG_INFO, "Caught signal, exiting");
-			remove("/var/tmp/aesdsocketdata");
- 			closelog();
-			exit(EXIT_SUCCESS);
-		}
-		if(time_thread)
-			exit(EXIT_SUCCESS);
-		tcount++;
-		if(tcount >200000)
-		{
-			tcount = 0;
-			ti = time(NULL);
-			if(ti >= reftime+10)
-			{
-				reftime = ti;
-				tmp = localtime(&ti);
-				if (tmp == NULL) {
-					perror("localtime");
-					exit(EXIT_FAILURE);
-				}
-				strncpy(timestr,"timestamp:",11);
-				int count = strftime(timestr+10, sizeof(timestr)+10, "%a, %d %b %Y %T %z", tmp);
-				if ( count == 0) {
-					//if (strftime(timestr+10, sizeof(timestr)-10, "%a, %d %b %Y %T", tmp) == 0) {
-					fprintf(stderr, "strftime returned 0");
-					exit(EXIT_FAILURE);
-				}
-				else
-				{
-					printf("Result string is \"%s\" + count: %d \n", timestr,count);
-					timestr[count+10] = '\n';
-					pthread_mutex_lock(&lock);
-					fp = fopen("/var/tmp/aesdsocketdata", "a+");
-					if (fp == NULL) exit(EXIT_FAILURE);
-					int writeLen = fwrite(timestr, sizeof(char), count+11, fp );
-					fclose(fp);
-					pthread_mutex_unlock(&lock);
-					if (writeLen == -1)
-						exit(EXIT_FAILURE);
-					
-				}
-			}
-		}
-
-	}
-	pthread_exit(NULL);
-}
-#endif
 
 static void timer_thread(union sigval sigval)
 {
@@ -257,12 +196,14 @@ static void timer_thread(union sigval sigval)
 
 	int len = sprintf(buf2, "timestamp:%s\n", buf1);
 	printf("timestamp:%s", buf1);
-	if (pthread_mutex_lock(&param->info->mutx) != 0) {
+	//if (pthread_mutex_lock(&param->info->mutx) != 0) {
+	if (pthread_mutex_lock(&lock) != 0) {
 		printf("Error %d (%s) locking thread data!\n", errno, strerror(errno));
 	} else {
 		lseek(param->info->fd, 0, SEEK_END);
 		write(param->info->fd, buf2, len);
-		if (pthread_mutex_unlock(&param->info->mutx) != 0)
+		//if (pthread_mutex_unlock(&param->info->mutx) != 0)
+		if (pthread_mutex_unlock(&lock) != 0)
 			printf("Error %d (%s) unlocking thread data!\n", errno, strerror(errno));
 	}
 }
@@ -272,12 +213,10 @@ static void signal_handler (int signal_number)
 	if(signal_number == SIGINT)
 	{
 		caught_sigint = true;
-		time_thread = true;
 	}
 	else if (signal_number == SIGTERM)
 	{
 		caught_sigterm = true;
-		time_thread = true;
 	}
 }
 
@@ -313,7 +252,7 @@ int main(int argc, char *argv[])
 
 	memset(&sev, 0, sizeof(struct sigevent));
 	memset(&td, 0, sizeof(struct thread_param));	
-	pthread_mutex_init(&lock, NULL);
+	////pthread_mutex_init(&lock, NULL);
 
 	_finfo.fd = open(temp_file, O_RDWR | O_CREAT | O_TRUNC, 0664);
 	if (_finfo.fd == -1) {
@@ -473,22 +412,8 @@ int main(int argc, char *argv[])
 		}
 		if(id>=BACKLOG)
 			break;
-		/*if(timeflag == true)
-		{
-			if( pthread_create(&timeid, NULL, time_write_thread, &status) != 0 )
-			{
-				printf("Failed to create thread\n");
-
-			}
-			else
-			{
-				//pthread_join(timeid,NULL);
-			}
-			timeflag = false;
-		}*/
 
 	}
-	//pthread_join(timeid,NULL);
 
 	shutdown(sockfd, SHUT_RD);
 	shutdown(sockfd, SHUT_WR);

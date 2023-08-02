@@ -20,10 +20,7 @@
 #define BACKLOG 50
 #define BUFFER_SIZE (1000)
 
-volatile bool caught_sigint = false;
-volatile bool caught_sigterm = false;
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
-char s[BACKLOG][INET6_ADDRSTRLEN];
+volatile bool caught_sigint_term = false;
 const char *temp_file = "/var/tmp/aesdsocketdata";
 
 struct f_info {
@@ -47,20 +44,30 @@ struct thread_node {
 
 void *socketThread(void *arg)
 {
-	int thsockfd = *((int *)arg);
-	FILE *fp;
+	struct thread_param *param = (struct thread_param *)arg;
+	int thsockfd = param->socket;
+	char ip_str[INET6_ADDRSTRLEN];;
 	char sendbuf[BUFFER_SIZE + 1];
 	int  readlen = 0;
 
 	long total_bytes = 0;
-	//char *recv_data;
 	char *recv_data = malloc (BUFFER_SIZE);
 	openlog("slog", LOG_PID|LOG_CONS, LOG_USER);
 
+	if (param->addr.sa_family == AF_INET6) { // AF_INET6
+            struct sockaddr_in6 *s = (struct sockaddr_in6 *)&param->addr;
+            inet_ntop(AF_INET6, &s->sin6_addr, ip_str, sizeof(ip_str));
+        } else {
+            struct sockaddr_in *s = (struct sockaddr_in *)&param->addr;
+            inet_ntop(AF_INET, &s->sin_addr, ip_str, sizeof(ip_str));
+        }
+
+        syslog(LOG_DEBUG, "Accepted connection from %s", ip_str);
+        printf("Accepted connection from %s", ip_str);
+
 	while(1)
 	{
-		//recv_data = malloc (BUFFER_SIZE);
-		if(caught_sigint || caught_sigterm)
+		if(caught_sigint_term)
 		{
 			//Close Sockets, Logging and Exit 
 			free(recv_data);
@@ -112,30 +119,18 @@ void *socketThread(void *arg)
 		char *total_data  = strchr(recv_data,'\n');
 		if(total_data != NULL)
 		{	
-			pthread_mutex_lock(&lock);
-			fp = fopen("/var/tmp/aesdsocketdata", "a+");
-			if (fp == NULL) exit(EXIT_FAILURE);
-			//perror("server: strchr");
+			pthread_mutex_lock(&param->info->mutx);
 			int total_bytes_recv = (total_data - recv_data)+1;
 			//write to file
 
-			int writeLen = fwrite(recv_data, sizeof(char), total_bytes_recv, fp );
-			if (writeLen == -1) {
-				perror("server: write");
-				free(recv_data);
-				shutdown(thsockfd, SHUT_RD);
-				shutdown(thsockfd, SHUT_WR);
-				close(thsockfd);
-				syslog(LOG_DEBUG, "write to file failed\n");
-				closelog();
-				exit(EXIT_FAILURE);
-			}
-
+			lseek(param->info->fd, 0, SEEK_END);
+			write(param->info->fd, recv_data, total_bytes_recv);
+			pthread_mutex_unlock(&param->info->mutx);
 			//printf("Read: recv_data:%x, total_data:%x, total_bytes_recv:%x \n",recv_data, total_data,total_bytes_recv);
-			fseek(fp, 0, SEEK_SET);
-			while ( (readlen = fread(sendbuf, sizeof(char), BUFFER_SIZE, fp )) )
+
+			lseek(param->info->fd, 0, SEEK_SET);
+			while ( (readlen = read(param->info->fd, sendbuf, 1)) )
 			{
-				printf("Readlen:%d\n",readlen);
 				if(readlen == -1 )
 				{
 					continue;
@@ -152,17 +147,14 @@ void *socketThread(void *arg)
 					exit(EXIT_FAILURE);
 				}
 			}
-			fclose(fp);
-			pthread_mutex_unlock(&lock);
 
 			shutdown(thsockfd, SHUT_RD);
 			shutdown(thsockfd, SHUT_WR);
 			close(thsockfd);
-			syslog (LOG_INFO, "Server: Closed connection from %s\n", s[0]);
+			syslog (LOG_INFO, "Server: Closed connection from %s\n", ip_str);
 			free(recv_data);
 			recv_data = malloc (BUFFER_SIZE);
 			total_bytes = BUFFER_SIZE;
-			//total_bytes = 0;
 			total_data = 0;
 			break;
 		}
@@ -196,27 +188,21 @@ static void timer_thread(union sigval sigval)
 
 	int len = sprintf(buf2, "timestamp:%s\n", buf1);
 	printf("timestamp:%s", buf1);
-	//if (pthread_mutex_lock(&param->info->mutx) != 0) {
-	if (pthread_mutex_lock(&lock) != 0) {
+	if (pthread_mutex_lock(&param->info->mutx) != 0) {
 		printf("Error %d (%s) locking thread data!\n", errno, strerror(errno));
 	} else {
 		lseek(param->info->fd, 0, SEEK_END);
 		write(param->info->fd, buf2, len);
-		//if (pthread_mutex_unlock(&param->info->mutx) != 0)
-		if (pthread_mutex_unlock(&lock) != 0)
+		if (pthread_mutex_unlock(&param->info->mutx) != 0)
 			printf("Error %d (%s) unlocking thread data!\n", errno, strerror(errno));
 	}
 }
 
 static void signal_handler (int signal_number)
 {
-	if(signal_number == SIGINT)
+	if(signal_number == SIGINT  || signal_number == SIGTERM)
 	{
-		caught_sigint = true;
-	}
-	else if (signal_number == SIGTERM)
-	{
-		caught_sigterm = true;
+		caught_sigint_term = true;
 	}
 }
 
@@ -232,27 +218,20 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(int argc, char *argv[])
 {
-	int  sockfd, new_fd, status, yes=1,id=0;
+	int  sockfd, status, yes=1;
 	struct addrinfo hints, *res , *p;
 	struct sigaction sa;
-	pthread_t tid[BACKLOG];
-	//pthread_t timeid;
 	int clock_id = CLOCK_REALTIME;
 	timer_t timerid = 0;
     	struct sigevent sev;
-	//bool timeflag = true;
 	struct f_info _finfo;
 	struct thread_param td;
-
-
-	struct sockaddr_storage their_addr;
-	socklen_t sin_size;
+	int addrlen = 0;
 
 	openlog("slog", LOG_PID|LOG_CONS, LOG_USER);
 
 	memset(&sev, 0, sizeof(struct sigevent));
 	memset(&td, 0, sizeof(struct thread_param));	
-	////pthread_mutex_init(&lock, NULL);
 
 	_finfo.fd = open(temp_file, O_RDWR | O_CREAT | O_TRUNC, 0664);
 	if (_finfo.fd == -1) {
@@ -277,7 +256,6 @@ int main(int argc, char *argv[])
 	status = getaddrinfo(NULL,SERVERPORT,&hints,&res);
 	if(status != 0)
 	{
-		//fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
 		syslog(LOG_ERR,"Getaddrinfo Error: (%s) ", gai_strerror(status));
  		closelog();
 		return -1;
@@ -311,7 +289,6 @@ int main(int argc, char *argv[])
 	freeaddrinfo(res); // all done with this structure
 
 	if (p == NULL)  {
-		//fprintf(stderr, "server: failed to bind\n");
 		syslog(LOG_ERR,"Server failed to Bind");
 		exit(EXIT_FAILURE);
 	}
@@ -374,46 +351,47 @@ int main(int argc, char *argv[])
 	printf("server: waiting for connections...\n");
 
 
-
-	while(1) {  // main accept() loop
-
-		if(caught_sigint || caught_sigterm)
-		{
-			//Close Sockets, Logging and Exit 
-			shutdown(sockfd, SHUT_RD);
-			shutdown(sockfd, SHUT_WR);
-			close(sockfd);
-			syslog(LOG_INFO, "Caught signal, exiting");
-			remove(temp_file);
- 			closelog();
-			exit(EXIT_FAILURE);
+	struct thread_node *head = malloc(sizeof(struct thread_node));
+	memset(head, 0, sizeof(struct thread_node));
+	while (!caught_sigint_term) {
+		struct thread_node *node = (struct thread_node *)malloc(sizeof(struct thread_node));
+		memset(node, 0, sizeof(struct thread_node));
+		struct thread_param *params = &node->param;
+		if ((params->socket
+					= accept(sockfd, &params->addr, (socklen_t*)&addrlen))
+				< 0) {
+			free(node);
+			if (caught_sigint_term)
+				break;
+			syslog(LOG_ERR, "accept failed");
+			printf("Error %d (%s) accept", errno, strerror(errno));
+			exit(-1);
 		}
 
-		sin_size = sizeof their_addr;
-		new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-		if (new_fd == -1) {
-			perror("accept");
-			continue;
+		params->info = &_finfo;
+		params->comp_flag = false;
+		pthread_create(&node->id, NULL, socketThread, params);
+		struct thread_node *tmp_head = head;
+		while (tmp_head->next != NULL) {
+			struct thread_node* node = tmp_head->next;
+			if (node->param.comp_flag) {
+				pthread_join(node->id, NULL);
+				tmp_head->next = node->next;
+				free(node);
+			} else
+				tmp_head = tmp_head->next;
 		}
-
-		inet_ntop(their_addr.ss_family,
-				get_in_addr((struct sockaddr *)&their_addr),
-				s[id], sizeof s[id]);
-		//printf("Server: Accepted connection from %s\n", s);
-		syslog (LOG_INFO, "Server: Accepted connection from %s\n", s[id]);
-		if( pthread_create(&tid[id++], NULL, socketThread, &new_fd) != 0 )
-		{
-			printf("Failed to create thread\n");
-
-		}
-		else
-		{
-			pthread_join(tid[id-1],NULL);
-		}
-		if(id>=BACKLOG)
-			break;
-
+		tmp_head->next = node;
 	}
+
+	while (head->next != NULL) {
+		struct thread_node* node = head->next;
+		pthread_join(node->id, NULL);
+		head->next = node->next;
+		free(node);
+	}
+	free(head);
+
 
 	shutdown(sockfd, SHUT_RD);
 	shutdown(sockfd, SHUT_WR);

@@ -1,6 +1,5 @@
 TARGET		 = aesdsocket
-CROSS_COMPILE	?=
-CC		 =$(CROSS_COMPILE)gcc
+CC?=$(CROSS_COMPILE)gcc
 CFLAGS		:= -g -Wall -Werror
 SRC		:= aesdsocket.c
 
@@ -10,4 +9,4 @@ $(TARGET) : $(SRC)
 	$(CC) $(CFLAGS) -o $(TARGET) $^ -lrt -pthread
 
 clean:
-	-rm -f *.o $(TARGET)
+	rm -f *.o $(TARGET)

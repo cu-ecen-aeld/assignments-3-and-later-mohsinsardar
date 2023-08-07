@@ -48,7 +48,7 @@ void *socketThread(void *arg)
 	int thsockfd = param->socket;
 	char ip_str[INET6_ADDRSTRLEN];;
 	char sendbuf[BUFFER_SIZE + 1];
-	int  readlen = 0;
+	int  readlen = 0, wrc = 0;
 
 	long total_bytes = 0;
 	char *recv_data = malloc (BUFFER_SIZE);
@@ -124,7 +124,9 @@ void *socketThread(void *arg)
 			//write to file
 
 			lseek(param->info->fd, 0, SEEK_END);
-			write(param->info->fd, recv_data, total_bytes_recv);
+			wrc = write(param->info->fd, recv_data, total_bytes_recv);
+			if(wrc == -1)
+				printf("Write Error\n");
 			pthread_mutex_unlock(&param->info->mutx);
 			//printf("Read: recv_data:%x, total_data:%x, total_bytes_recv:%x \n",recv_data, total_data,total_bytes_recv);
 
@@ -175,6 +177,7 @@ static void timer_thread(union sigval sigval)
 	struct tm *tmp;
 	char buf1[100];
 	char buf2[120];
+	int wrc = 0;
 
 	memset(buf1, 0, sizeof(buf1));
 	memset(buf2, 0, sizeof(buf2));
@@ -192,7 +195,9 @@ static void timer_thread(union sigval sigval)
 		printf("Error %d (%s) locking thread data!\n", errno, strerror(errno));
 	} else {
 		lseek(param->info->fd, 0, SEEK_END);
-		write(param->info->fd, buf2, len);
+		wrc = write(param->info->fd, buf2, len);
+		if(wrc == -1)
+			printf("Write Error\n");
 		if (pthread_mutex_unlock(&param->info->mutx) != 0)
 			printf("Error %d (%s) unlocking thread data!\n", errno, strerror(errno));
 	}

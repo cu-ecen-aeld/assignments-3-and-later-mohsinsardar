@@ -166,7 +166,8 @@ void *socketThread(void *arg)
 	close(thsockfd);
 
 
-	pthread_exit(NULL);
+	//pthread_exit(NULL);
+	return arg;
 }
 
 

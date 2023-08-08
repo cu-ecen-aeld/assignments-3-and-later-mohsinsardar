@@ -4,7 +4,7 @@ set -e
 case "$1" in
     start)
         echo "Starting simpleserver"
-        start-stop-daemon --start --quiet -n aesdsocket --exec /bin/aesdsocket -- "-d"
+        start-stop-daemon --start --quiet -n aesdsocket --exec /usr/bin/aesdsocket -- "-d"
         ;;
     stop)
         echo "Stopping simpleserver"

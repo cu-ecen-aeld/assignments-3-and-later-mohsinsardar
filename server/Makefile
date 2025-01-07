@@ -1,12 +1,22 @@
-TARGET		 = aesdsocket
-CC?=$(CROSS_COMPILE)gcc
-CFLAGS		:= -g -Wall -Werror
-SRC		:= aesdsocket.c
+# Daniel Mendez
+# ECEN 5713
+# Assignment 5
 
-all: $(TARGET)
+CC ?= $(CROSS_COMPILE)gcc
+CFLAGS ?= -Wall -Wextra -g
+INCLUDES ?= -I./include  
+LDFLAGS ?= -pthread -lrt
 
-$(TARGET) : $(SRC)
-	$(CC) $(CFLAGS) -o $(TARGET) $^ -lrt -pthread
+OUTPUT = aesdsocket
+
+SOURCES = aesdsocket.c
+
+OBJS = $(SOURCES:.c=.o)
+
+all: $(OUTPUT)
+
+$(OUTPUT): $(OBJS)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $(OUTPUT) $(OBJS) $(LDFLAGS)
 
 clean:
-	rm -f *.o $(TARGET)
+	rm -f $(OUTPUT) $(OBJS)

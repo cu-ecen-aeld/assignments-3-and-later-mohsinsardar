@@ -77,7 +77,6 @@ ssize_t aesd_read(struct file *filp, char __user *buf, size_t count,
 	
 	PDEBUG("read %d bytes with fps %lld",count,*f_pos);
 
-    entry = aesd_circular_buffer_find_entry_offset_for_fpos(circular_buffer, *f_pos, &entry_offset_byte);
     
     if(entry == NULL) {
         retval = 0;
@@ -189,44 +188,6 @@ ssize_t aesd_write(struct file *filp, const char __user *buf, size_t count,
 		return retval;
 }
 
-loff_t aesd_llseek (struct file * filp, loff_t offset, int whence){
-	
-	
-	//Get the aesd device structure
-	struct aesd_dev *dev = filp->private_data;
-	loff_t new_position;
-	size_t total_buffer_size = 0;
-	uint8_t index;
-	struct aesd_buffer_entry *entryptr;
-	ssize_t retval = 0;
-
-
-	//First we lock the structure
-	int res = mutex_lock_interruptible(&(dev->lock));
-	if(res){
-		return -ERESTARTSYS;
-	}
-	
-	//Calculate the size of the circular buffer by iterating through the entries
-	AESD_CIRCULAR_BUFFER_FOREACH(entryptr,&dev->circular_buffer,index){
-		if(entryptr->buffptr){
-			total_buffer_size+= entryptr->size;
-		}	
-	}
-	//Unlock the mutex
-	mutex_unlock(&dev->lock);
-	PDEBUG("Total size of buffer is %zu",total_buffer_size);
-	//Now call generic llseek
-	new_position = fixed_size_llseek(filp, offset, whence,total_buffer_size);
-	
-	PDEBUG("New position is %zu",new_position);
-	if(new_position < 0){
-		retval = -EINVAL;
-	}
-	
-	
-	return retval;
-}
 
 long aesd_ioctl(struct file *filp, unsigned int cmd, unsigned long arg){
 	
@@ -328,7 +289,6 @@ struct file_operations aesd_fops = {
     .read =     aesd_read,
     .write =    aesd_write,
     .open =     aesd_open,
-	.llseek =   aesd_llseek,
     .release =  aesd_release,
 	.unlocked_ioctl = aesd_ioctl,
 };

@@ -44,51 +44,6 @@ uint8_t get_length(struct aesd_circular_buffer * buffer){
 }
 
 /**
- * @param buffer the buffer to search for corresponding offset.  Any necessary locking must be performed by caller.
- * @param char_offset the position to search for in the buffer list, describing the zero referenced
- *      character index if all buffer strings were concatenated end to end
- * @param entry_offset_byte_rtn is a pointer specifying a location to store the byte of the returned aesd_buffer_entry
- *      buffptr member corresponding to char_offset.  This value is only set when a matching char_offset is found
- *      in aesd_buffer.
- * @return the struct aesd_buffer_entry structure representing the position described by char_offset, or
- * NULL if this position is not available in the buffer (not enough data is written).
- */
-struct aesd_buffer_entry *aesd_circular_buffer_find_entry_offset_for_fpos(struct aesd_circular_buffer *buffer,
-            size_t char_offset, size_t *entry_offset_byte_rtn )
-{
-    size_t chars_scanned = 0;
-    size_t prev_chars_scanned = 0;
-    uint32_t entries_scanned = 0;
-    uint8_t read_pos = buffer->out_offs;
-    uint8_t num_entries =  get_length(buffer);
-    bool entry_found = false;
-    //First we need to know which entry the char_offset would lie within
-    while(!entry_found){
-        //Check to make sure we haven't reached the end
-        if(entries_scanned == num_entries){
-            return NULL;
-        }
-        //Store the previous amount
-        prev_chars_scanned = chars_scanned;
-        //We add to the chars searched
-        chars_scanned += buffer->entry[read_pos].size;
-        // We also increment the entry offset
-        entries_scanned++;
-        //We advance the read_pos
-        read_pos = increment_pointer(read_pos);
-        //Check if the chars processed has passed the offset
-        if(chars_scanned >= char_offset+1){
-            entry_found = true;
-        }
-    }
-    *entry_offset_byte_rtn = char_offset - prev_chars_scanned;
-    uint8_t entry_index = (buffer->out_offs + entries_scanned - 1) %AESDCHAR_MAX_WRITE_OPERATIONS_SUPPORTED;
-    //Return the right entry
-    return &buffer->entry[entry_index];
-
-}
-
-/**
 * Adds entry @param add_entry to @param buffer in the location specified in buffer->in_offs.
 * If the buffer was already full, overwrites the oldest entry and advances buffer->out_offs to the
 * new start location.
